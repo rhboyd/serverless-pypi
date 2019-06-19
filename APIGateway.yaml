@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  STAGE:
+    Type: String
+    Description: Stage for deployment.
+    # Default: "rboyd"
+  DOMAIN:
+    Type: String
+    Description: Domain used for API
+    # Default: "hkc.iot.irobotapi.com"
+
+Resources:
+    PyPiAPI:
+      Type: AWS::ApiGateway::RestApi
+      Properties:
+        Name: "Serverless PyPi"
+        BinaryMediaTypes:
+         - application/x-gzip
+        Policy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: "*"
+              Action:
+                - execute-api:Invoke
+              Resource:
+                - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*"
+    PackageResource:
+      Type: AWS::ApiGateway::Resource
+      Properties:
+        ParentId: !GetAtt PyPiAPI.RootResourceId
+        PathPart: "{package_name}"
+        RestApiId: !Ref PyPiAPI
+    VersionResource:
+      Type: AWS::ApiGateway::Resource
+      Properties:
+        ParentId: !Ref PackageResource
+        PathPart: "{package_id}"
+        RestApiId: !Ref PyPiAPI
+    BaseMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        HttpMethod: GET
+        ResourceId: !GetAtt PyPiAPI.RootResourceId
+        RestApiId: !Ref PyPiAPI
+        AuthorizationType: AWS_IAM
+        MethodResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+              method.response.header.Content-Type: true
+            StatusCode: 200
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+            StatusCode: 400
+        Integration:
+          Type: AWS
+          IntegrationHttpMethod: POST
+          Credentials: !GetAtt DynamoDBReadOnly.Arn
+          Uri: !Sub "arn:aws:apigateway:${AWS::Region}:dynamodb:action/Query"
+          RequestTemplates:
+            application/json:
+              Fn::Sub:
+                - |
+                  {
+                      "TableName": "${TableName}",
+                      "KeyConditionExpression": "PartitionKey = :v1",
+                      "ExpressionAttributeValues": {
+                          ":v1": {
+                              "S": "Package"
+                          }
+                      }
+                  }
+                - TableName: !ImportValue PackageTable
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseTemplates:
+                application/json: !Sub
+                  - |
+                    #set($context.responseOverride.header.Content-Type = "text/html")
+                    #set($inputRoot = $input.path('$'))
+                    <html>
+                    <body>
+                    #foreach($elem in $inputRoot.Items)
+                    <a href="/$elem.SortKey.S">$elem.SortKey.S</a><br>
+                    #end
+                    </body>
+                    </html>
+                  - foo: bar
+            - StatusCode: 400
+
+    GetPackageMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        HttpMethod: GET
+        ResourceId: !Ref PackageResource
+        RestApiId: !Ref PyPiAPI
+        AuthorizationType: AWS_IAM
+        MethodResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+              method.response.header.Content-Type: true
+            StatusCode: 200
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+            StatusCode: 400
+        Integration:
+          Type: AWS
+          IntegrationHttpMethod: POST
+          Credentials: !GetAtt DynamoDBReadOnly.Arn
+          Uri: !Sub "arn:aws:apigateway:${AWS::Region}:dynamodb:action/Query"
+          RequestTemplates:
+            application/json:
+              Fn::Sub:
+                - |
+                  {
+                      "TableName": "${TableName}",
+                      "KeyConditionExpression": "PartitionKey = :v1",
+                      "ExpressionAttributeValues": {
+                          ":v1": {
+                              "S": "$input.params('package_name')"
+                          }
+                      }
+                  }
+                - TableName: !ImportValue PackageTable
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseTemplates:
+                application/json: !Sub
+                  - |
+                    #set($context.responseOverride.header.Content-Type = "text/html")
+                    #set($inputRoot = $input.path('$'))
+                    <html>
+                    <body>
+                    #foreach($elem in $inputRoot.Items)
+                    <a href="/$elem.PartitionKey.S/$elem.PackageName.S">$elem.PackageName.S</a><br>
+                    #end
+                    </body>
+                    </html>
+                  - foo: bar
+            - StatusCode: 400
+
+    GetVerrsionMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        HttpMethod: GET
+        ResourceId: !Ref VersionResource
+        RestApiId: !Ref PyPiAPI
+        AuthorizationType: AWS_IAM
+        MethodResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+              method.response.header.Content-Type: true
+            StatusCode: 200
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+            StatusCode: 400
+        Integration:
+          Type: AWS
+          IntegrationHttpMethod: GET
+          Credentials: !GetAtt DynamoDBReadOnly.Arn
+          Uri: !Sub
+           - "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/{object}"
+           - BucketName: !ImportValue PyPiBucketName
+          RequestTemplates:
+            application/json: !Sub |
+                  #set($context.requestOverride.path.object = $input.params('package_id'))
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseParameters:
+                method.response.header.Content-Type: integration.response.header.Content-Type
+            - StatusCode: 400
+
+
+    DynamoDBReadOnly:
+      Type: "AWS::IAM::Role"
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal:
+                Service:
+                  - "apigateway.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Path: "/"
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess
+          - arn:aws:iam::aws:policy/AdministratorAccess
+
+    PyPiAPIdeployment003:
+      Type: AWS::ApiGateway::Deployment
+      DependsOn:
+        - BaseMethod
+        - GetVerrsionMethod
+        - GetPackageMethod
+      Properties:
+        Description: !Sub "${STAGE} Stage for PyPi"
+        RestApiId:
+          Ref: PyPiAPI
+        StageName: Prod
+
+    APIDomainName:
+      Type: AWS::ApiGateway::DomainName
+      Properties:
+        CertificateArn:
+          Fn::ImportValue: "ACMCertArn"
+        DomainName: !Sub "${STAGE}.${DOMAIN}"
+    APIBasePathMapping:
+      Type: AWS::ApiGateway::BasePathMapping
+      Properties:
+        DomainName: !Ref APIDomainName
+        RestApiId: !Ref PyPiAPI
+        Stage: Prod
+    APIDomain:
+      Type: AWS::Route53::RecordSetGroup
+      Properties:
+        HostedZoneName: !Sub "${STAGE}.${DOMAIN}."
+        RecordSets:
+          - Name: !Sub "${STAGE}.${DOMAIN}"
+            Type: A
+            AliasTarget:
+              DNSName: !GetAtt APIDomainName.DistributionDomainName
+              HostedZoneId: !GetAtt APIDomainName.DistributionHostedZoneId
+
+Outputs:
+
+    RobotApi:
+      Description: "API Gateway reference"
+      Value:
+        Ref: PyPiAPI
+      Export :
+        Name: "APIGateway-id"
