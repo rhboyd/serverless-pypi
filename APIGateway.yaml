@@ -40,10 +40,10 @@ Resources:
         ParentId: !Ref PackageResource
         PathPart: "{package_id}"
         RestApiId: !Ref PyPiAPI
-    BaseMethod:
+    GetJWTMethod:
       Type: AWS::ApiGateway::Method
       Properties:
-        HttpMethod: GET
+        HttpMethod: POST
         ResourceId: !GetAtt PyPiAPI.RootResourceId
         RestApiId: !Ref PyPiAPI
         AuthorizationType: AWS_IAM
@@ -59,7 +59,37 @@ Resources:
           Type: AWS
           IntegrationHttpMethod: POST
           Credentials: !GetAtt DynamoDBReadOnly.Arn
-          Uri: !Sub "arn:aws:apigateway:${AWS::Region}:dynamodb:action/Query"
+          Uri: !Join
+            - ''
+            - - 'arn:aws:apigateway:'
+              - !Ref 'AWS::Region'
+              - ':lambda:path/2015-03-31/functions/'
+              - !ImportValue "JWTProviderFunctionArn"
+              - /invocations
+          IntegrationResponses:
+            - StatusCode: 200
+            - StatusCode: 400
+    BaseMethod:
+      Type: AWS::ApiGateway::Method
+      Properties:
+        HttpMethod: GET
+        AuthorizerId: !Ref Authorizer
+        ResourceId: !GetAtt PyPiAPI.RootResourceId
+        RestApiId: !Ref PyPiAPI
+        AuthorizationType: CUSTOM
+        MethodResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+              method.response.header.Content-Type: true
+            StatusCode: 200
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: true
+            StatusCode: 400
+        Integration:
+          Type: AWS
+          IntegrationHttpMethod: POST
+          Credentials: !GetAtt DynamoDBReadOnly.Arn
+          Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:dynamodb:action/Query"
           RequestTemplates:
             application/json:
               Fn::Sub:
@@ -95,9 +125,10 @@ Resources:
       Type: AWS::ApiGateway::Method
       Properties:
         HttpMethod: GET
+        AuthorizerId: !Ref Authorizer
         ResourceId: !Ref PackageResource
         RestApiId: !Ref PyPiAPI
-        AuthorizationType: AWS_IAM
+        AuthorizationType: CUSTOM
         MethodResponses:
           - ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: true
@@ -110,7 +141,7 @@ Resources:
           Type: AWS
           IntegrationHttpMethod: POST
           Credentials: !GetAtt DynamoDBReadOnly.Arn
-          Uri: !Sub "arn:aws:apigateway:${AWS::Region}:dynamodb:action/Query"
+          Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:dynamodb:action/Query"
           RequestTemplates:
             application/json:
               Fn::Sub:
@@ -146,9 +177,10 @@ Resources:
       Type: AWS::ApiGateway::Method
       Properties:
         HttpMethod: GET
+        AuthorizerId: !Ref Authorizer
         ResourceId: !Ref VersionResource
         RestApiId: !Ref PyPiAPI
-        AuthorizationType: AWS_IAM
+        AuthorizationType: CUSTOM
         MethodResponses:
           - ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: true
@@ -162,7 +194,7 @@ Resources:
           IntegrationHttpMethod: GET
           Credentials: !GetAtt DynamoDBReadOnly.Arn
           Uri: !Sub
-           - "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/{object}"
+           - "arn:${AWS::Partition}:apigateway:${AWS::Region}:s3:path/${BucketName}/{object}"
            - BucketName: !ImportValue PyPiBucketName
           RequestTemplates:
             application/json: !Sub |
@@ -172,6 +204,37 @@ Resources:
               ResponseParameters:
                 method.response.header.Content-Type: integration.response.header.Content-Type
             - StatusCode: 400
+
+    BasicAuthResposne:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.WWW-Authenticate: "'Basic'"
+        ResponseTemplates:
+          application/json: |
+            {"message":$context.error.messageString}
+        ResponseType: "MISSING_AUTHENTICATION_TOKEN"
+        RestApiId: !Ref PyPiAPI
+        StatusCode: 401
+
+    Authorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        AuthorizerCredentials: !GetAtt
+            - DynamoDBReadOnly
+            - Arn
+        AuthorizerResultTtlInSeconds: '300'
+        AuthorizerUri: !Join
+          - ''
+          - - 'arn:aws:apigateway:'
+            - !Ref 'AWS::Region'
+            - ':lambda:path/2015-03-31/functions/'
+            - !ImportValue "AuthorizerFunctionArn"
+            - /invocations
+        Type: TOKEN
+        IdentitySource: method.request.header.Authorization
+        Name: DefaultAuthorizer
+        RestApiId: !Ref PyPiAPI
 
 
     DynamoDBReadOnly:
