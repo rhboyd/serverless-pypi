@@ -1,8 +1,4 @@
-# serverlessPyPi
-
-This is a sample template for serverlessPyPi - Below is a brief explanation of what we have generated for you:
-
-```bash
+set -e
 S3Bucket=478921047804-staging
 ProjectName=serverless-pypi
 
@@ -28,18 +24,5 @@ aws cloudformation deploy \
 --stack-name $ProjectName \
 --capabilities CAPABILITY_IAM \
 --parameter-overrides Domain=rboyd.dev Stage=pypi FunctionStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$BaseTemplateFile" ACMStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$ACMTemplateFile" APIGWStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$APIGWTemplateFile" \
+--capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_IAM \
 --profile pypi
-
-## Testing 
-sam local invoke -t ./build/template.yaml --event event.json HelloWorldFunction
-
-
-JWTProvider=$(aws cloudformation describe-stacks --stack-name $ProjectName-base --profile pypi | jq '."Stacks"[0]."Outputs"[] | select(.OutputKey | contains("JWTProviderFunctionArn"))."OutputValue"' -r)
-AuthFunction=$(aws cloudformation describe-stacks --stack-name $ProjectName-base --profile pypi | jq '."Stacks"[0]."Outputs"[] | select(.OutputKey | contains("AuthorizerFunctionArn"))."OutputValue"' -r)
-
-
-python src/pip install richardexample -i https://pypi.rboyd.dev --verbose --no-cache-dir
-UserName=Richard
-Password=[]
-pip install richardexample -i https://$UserName:$Password@pypi.rboyd.dev/ --verbose --no-cache-dir
-```

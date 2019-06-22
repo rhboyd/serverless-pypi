@@ -38,12 +38,11 @@ Resources:
    Type: AWS::CloudFormation::Stack
    Properties:
      Parameters:
-       Stage: !Ref STAGE
-       Domain: !Ref DOMAIN
-       AuthorizerArn: !GetAtt FunctionStack.AuthorizerFunctionArn
-       JWTCreatorArn: !GetAtt FunctionStack.JWTProviderFunctionArn
-       PackageTableName: !GetAtt FunctionStack.PackageTableName
-       ACMCertArn: !GetAtt ACMStack.ACMCertArn
-       RedirectFunctionArn: !GetAtt FunctionStack.RedirectFunctionArn
+       Stage: !Ref Stage
+       Domain: !Ref Domain
+       AuthorizerArn: !GetAtt FunctionStack.Outputs.AuthorizerFunctionArn
+       JWTCreatorArn: !GetAtt FunctionStack.Outputs.JWTProviderFunctionArn
+       PackageTableName: !GetAtt FunctionStack.Outputs.PackageTableName
+       ACMCertArn: !GetAtt ACMStack.Outputs.ACMCertArn
+       RedirectFunctionArn: !GetAtt FunctionStack.Outputs.RedirectFunctionArn
      TemplateURL: !Ref APIGWStackURL
-Outputs:

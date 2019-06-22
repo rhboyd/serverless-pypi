@@ -9,7 +9,7 @@ Resources:
   ProcessUploadsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: process_uploads/
+      CodeUri: ../functions/process_uploads/
       Handler: app.lambda_handler
       Runtime: python3.7
       Timeout: 300
@@ -25,7 +25,7 @@ Resources:
   RedirectFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: redirect_function/
+      CodeUri: ../functions/redirect_function/
       Handler: app.lambda_handler
       Runtime: python3.7
       Timeout: 300
@@ -44,7 +44,7 @@ Resources:
   JWTProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: custom_auth/
+      CodeUri: ../functions/custom_auth/
       Handler: app.jwt_provider_handler
       Runtime: python3.7
       Timeout: 300
@@ -60,7 +60,7 @@ Resources:
   AuthValidatorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: custom_auth/
+      CodeUri: ../functions/custom_auth/
       Handler: app.custom_auth_handler
       Runtime: python3.7
       Timeout: 300
