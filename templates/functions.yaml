@@ -21,6 +21,7 @@ Resources:
       Environment:
         Variables:
           DDB_TABLE_NAME: !Ref DDBTable
+
   RedirectFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -31,8 +32,14 @@ Resources:
       Policies:
         - Statement:
             - Effect: "Allow"
-              Action: "*"
-              Resource: "*"
+              Action: "s3:GetObject"
+              Resource: !Sub
+                 - |
+                    "${PyPiBucketArn}/*"
+                 - PyPiBucketArn: !GetAtt PyPiBucket.Arn
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref PyPiBucket
 
   JWTProviderFunction:
     Type: AWS::Serverless::Function
@@ -44,8 +51,8 @@ Resources:
       Policies:
         - Statement:
             - Effect: "Allow"
-              Action: "*"
-              Resource: "*"
+              Action: "dynamodb:PutItem"
+              Resource: !GetAtt UserTokenTable.Arn
       Environment:
         Variables:
           DDB_TABLE_NAME: !Ref UserTokenTable
@@ -60,8 +67,8 @@ Resources:
       Policies:
         - Statement:
             - Effect: "Allow"
-              Action: "*"
-              Resource: "*"
+              Action: "dynamodb:GetItem"
+              Resource: !GetAtt UserTokenTable.Arn
       Environment:
         Variables:
           DDB_TABLE_NAME: !Ref UserTokenTable
@@ -108,26 +115,22 @@ Resources:
         WriteCapacityUnits: 5
 
 Outputs:
-  DDBTableName:
+  PackageTableName:
     Description: "Name for DynamoDB Table"
     Value: !Ref DDBTable
-    Export:
-      Name: PackageTable
 
   PyPiBucketName:
     Description: "Arn for redirect Function"
     Value: !Ref PyPiBucket
-    Export:
-      Name: PyPiBucketName
+
+  RedirectFunctionArn:
+    Description: "Arn for RedirectFunction"
+    Value: !GetAtt RedirectFunction.Arn
 
   AuthorizerFunctionArn:
     Description: "Arn for Authorizer Function"
     Value: !GetAtt AuthValidatorFunction.Arn
-    Export:
-      Name: AuthorizerFunctionArn
 
   JWTProviderFunctionArn:
     Description: "Arn for JWTProviderFunction"
     Value: !GetAtt JWTProviderFunction.Arn
-    Export:
-      Name: JWTProviderFunctionArn

@@ -2,14 +2,28 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
 Parameters:
-  STAGE:
+  Stage:
     Type: String
     Description: Stage for deployment.
-    # Default: "rboyd"
-  DOMAIN:
+  Domain:
     Type: String
     Description: Domain used for API
-    # Default: "hkc.iot.irobotapi.com"
+  AuthorizerArn:
+    Type: String
+    Description: Arn for the Lambda Function that authorizes JWTs
+  JWTCreatorArn:
+    Type: String
+    Description: Arn for the Lambda Function that creates JWTs to use as passwords
+  RedirectFunctionArn:
+    Type: String
+    Description: Arn for the redirect Function
+  PackageTableName:
+    Type: String
+    Description: Name for the Table containing Package Metadata
+  ACMCertArn:
+    Type: String
+    Description: ARN for the ACM Cert for the API
+
 
 Resources:
     PyPiAPI:
@@ -58,14 +72,8 @@ Resources:
         Integration:
           Type: AWS
           IntegrationHttpMethod: POST
-          Credentials: !GetAtt DynamoDBReadOnly.Arn
-          Uri: !Join
-            - ''
-            - - 'arn:aws:apigateway:'
-              - !Ref 'AWS::Region'
-              - ':lambda:path/2015-03-31/functions/'
-              - !ImportValue "JWTProviderFunctionArn"
-              - /invocations
+          Credentials: !GetAtt InvokeLambdaRole.Arn
+          Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${JWTCreatorArn}/invocations"
           IntegrationResponses:
             - StatusCode: 200
             - StatusCode: 400
@@ -91,11 +99,9 @@ Resources:
           Credentials: !GetAtt DynamoDBReadOnly.Arn
           Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:dynamodb:action/Query"
           RequestTemplates:
-            application/json:
-              Fn::Sub:
-                - |
+            application/json: !Sub |
                   {
-                      "TableName": "${TableName}",
+                      "TableName": "${PackageTableName}",
                       "KeyConditionExpression": "PartitionKey = :v1",
                       "ExpressionAttributeValues": {
                           ":v1": {
@@ -103,7 +109,6 @@ Resources:
                           }
                       }
                   }
-                - TableName: !ImportValue PackageTable
           IntegrationResponses:
             - StatusCode: 200
               ResponseTemplates:
@@ -143,11 +148,9 @@ Resources:
           Credentials: !GetAtt DynamoDBReadOnly.Arn
           Uri: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}:dynamodb:action/Query"
           RequestTemplates:
-            application/json:
-              Fn::Sub:
-                - |
+            application/json: !Sub |
                   {
-                      "TableName": "${TableName}",
+                      "TableName": "${PackageTableName}",
                       "KeyConditionExpression": "PartitionKey = :v1",
                       "ExpressionAttributeValues": {
                           ":v1": {
@@ -155,7 +158,6 @@ Resources:
                           }
                       }
                   }
-                - TableName: !ImportValue PackageTable
           IntegrationResponses:
             - StatusCode: 200
               ResponseTemplates:
@@ -184,25 +186,19 @@ Resources:
         MethodResponses:
           - ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: true
-              method.response.header.Content-Type: true
             StatusCode: 200
           - ResponseParameters:
               method.response.header.Access-Control-Allow-Origin: true
             StatusCode: 400
         Integration:
           Type: AWS
-          IntegrationHttpMethod: GET
-          Credentials: !GetAtt DynamoDBReadOnly.Arn
+          IntegrationHttpMethod: POST
+          Credentials: !GetAtt InvokeLambdaRole.Arn
           Uri: !Sub
-           - "arn:${AWS::Partition}:apigateway:${AWS::Region}:s3:path/${BucketName}/{object}"
-           - BucketName: !ImportValue PyPiBucketName
-          RequestTemplates:
-            application/json: !Sub |
-                  #set($context.requestOverride.path.object = $input.params('package_id'))
+           - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RedirectFunction}/invocations"
+           - RedirectFunction: !Ref RedirectFunctionArn
           IntegrationResponses:
             - StatusCode: 200
-              ResponseParameters:
-                method.response.header.Content-Type: integration.response.header.Content-Type
             - StatusCode: 400
 
     BasicAuthResposne:
@@ -224,13 +220,7 @@ Resources:
             - DynamoDBReadOnly
             - Arn
         AuthorizerResultTtlInSeconds: '300'
-        AuthorizerUri: !Join
-          - ''
-          - - 'arn:aws:apigateway:'
-            - !Ref 'AWS::Region'
-            - ':lambda:path/2015-03-31/functions/'
-            - !ImportValue "AuthorizerFunctionArn"
-            - /invocations
+        AuthorizerUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizerArn}/invocations"
         Type: TOKEN
         IdentitySource: method.request.header.Authorization
         Name: DefaultAuthorizer
@@ -252,6 +242,22 @@ Resources:
         Path: "/"
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess
+
+    InvokeLambdaRole:
+      Type: "AWS::IAM::Role"
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal:
+                Service:
+                  - "apigateway.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Path: "/"
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AWSLambdaFullAccess
           - arn:aws:iam::aws:policy/AdministratorAccess
 
     PyPiAPIdeployment003:
@@ -261,7 +267,7 @@ Resources:
         - GetVerrsionMethod
         - GetPackageMethod
       Properties:
-        Description: !Sub "${STAGE} Stage for PyPi"
+        Description: !Sub "${Stage} Stage for PyPi"
         RestApiId:
           Ref: PyPiAPI
         StageName: Prod
@@ -269,9 +275,8 @@ Resources:
     APIDomainName:
       Type: AWS::ApiGateway::DomainName
       Properties:
-        CertificateArn:
-          Fn::ImportValue: "ACMCertArn"
-        DomainName: !Sub "${STAGE}.${DOMAIN}"
+        CertificateArn: !Ref ACMCertArn
+        DomainName: !Sub "${Stage}.${Domain}"
     APIBasePathMapping:
       Type: AWS::ApiGateway::BasePathMapping
       Properties:
@@ -281,9 +286,9 @@ Resources:
     APIDomain:
       Type: AWS::Route53::RecordSetGroup
       Properties:
-        HostedZoneName: !Sub "${STAGE}.${DOMAIN}."
+        HostedZoneName: !Sub "${Stage}.${Domain}."
         RecordSets:
-          - Name: !Sub "${STAGE}.${DOMAIN}"
+          - Name: !Sub "${Stage}.${Domain}"
             Type: A
             AliasTarget:
               DNSName: !GetAtt APIDomainName.DistributionDomainName

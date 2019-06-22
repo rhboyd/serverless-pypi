@@ -2,10 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
 Parameters:
-  STAGE:
+  Stage:
     Type: String
     Description: Stage for deployment.
-  DOMAIN:
+  Domain:
     Type: String
     Description: Domain used for API
 
@@ -32,7 +32,7 @@ Resources:
       Properties:
         ServiceToken: !GetAtt ACMRegisterFunction.Arn
         Region: !Ref "AWS::Region"
-        HostedZoneName: !Sub "${STAGE}.${DOMAIN}"
+        HostedZoneName: !Sub "${Stage}.${Domain}"
 
 Outputs:
     ACMCertArn:

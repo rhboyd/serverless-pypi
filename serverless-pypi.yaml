@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Main template for serverless PyPi
+
+Parameters:
+  Stage:
+    Type: String
+    Description: Stage for deployment.
+  Domain:
+    Type: String
+    Description: Domain used for API
+  FunctionStackURL:
+    Type: String
+    Description: S3 Location for Function Stack
+  ACMStackURL:
+    Type: String
+    Description: S3 Location for ACM Stack
+  APIGWStackURL:
+    Type: String
+    Description: S3 Location for APIGW Stack
+
+Resources:
+ FunctionStack:
+   Type: AWS::CloudFormation::Stack
+   Properties:
+     TemplateURL: !Ref FunctionStackURL
+
+ ACMStack:
+   Type: AWS::CloudFormation::Stack
+   Properties:
+     Parameters:
+       Stage: !Ref Stage
+       Domain: !Ref Domain
+     TemplateURL: !Ref ACMStackURL
+
+ APIGWStack:
+   Type: AWS::CloudFormation::Stack
+   Properties:
+     Parameters:
+       Stage: !Ref STAGE
+       Domain: !Ref DOMAIN
+       AuthorizerArn: !GetAtt FunctionStack.AuthorizerFunctionArn
+       JWTCreatorArn: !GetAtt FunctionStack.JWTProviderFunctionArn
+       PackageTableName: !GetAtt FunctionStack.PackageTableName
+       ACMCertArn: !GetAtt ACMStack.ACMCertArn
+       RedirectFunctionArn: !GetAtt FunctionStack.RedirectFunctionArn
+     TemplateURL: !Ref APIGWStackURL
+Outputs:

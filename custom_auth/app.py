@@ -62,9 +62,8 @@ def custom_auth_handler(event, context):
 
 
 def jwt_provider_handler(event, context):
-    body = json.loads(event['body'])
-    if 'user_name' in body:
-        user_name = body['user_name']
+    if 'user_name' in event:
+        user_name = event['user_name']
         user_version = str(uuid.uuid4())
         encoded_jwt = jwt.encode(
             {
