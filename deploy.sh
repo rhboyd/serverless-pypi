@@ -23,6 +23,6 @@ aws cloudformation deploy \
 --template-file serverless-pypi.yaml \
 --stack-name $ProjectName \
 --capabilities CAPABILITY_IAM \
---parameter-overrides Domain=rboyd.dev Stage=pypi FunctionStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$BaseTemplateFile" ACMStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$ACMTemplateFile" APIGWStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$APIGWTemplateFile" \
+--parameter-overrides Domain=rboyd.dev Stage=pypi FunctionStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$FunctionsTemplateFile" ACMStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$ACMTemplateFile" APIGWStackURL="https://$S3Bucket.s3.amazonaws.com/templates/$APIGWTemplateFile" \
 --capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_IAM \
 --profile pypi
