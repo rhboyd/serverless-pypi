@@ -75,6 +75,37 @@ Resources:
 
   PyPiBucket:
     Type: AWS::S3::Bucket
+    DependsOn: S3InvokeLambdaPermission
+    DeletionPolicy: Retain
+    Properties:
+      # We have to manually name the bucket because there's a circular dependency that AWS REALLY needs to fix!!
+      BucketName:
+        'Fn::Transform':
+          - Name: 'String'
+            Parameters:
+              InputString: !Sub "${AWS::StackName}-pypi"
+              Operation: Lower
+      NotificationConfiguration:
+          LambdaConfigurations:
+            - Event: 's3:ObjectCreated:*'
+              Function: !GetAtt ProcessUploadsFunction.Arn
+
+
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt ProcessUploadsFunction.Arn
+      Principal: 's3.amazonaws.com'
+      SourceArn: !Sub
+        - |
+          'arn:aws:s3:::${bucketname}'
+        - bucketname:
+            'Fn::Transform':
+              - Name: 'String'
+                Parameters:
+                  InputString: !Sub "${AWS::StackName}-pypi"
+                  Operation: Lower
 
 
   UserTokenTable:
